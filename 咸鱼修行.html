@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>咸鱼修行 · 今日面板</title>
+<style>
+  :root{
+    --bg:#0f1216; --card:#151a21; --ink:#e8eef7; --muted:#a8b3c7; --accent:#86e1d8; --line:#233040;
+    --ok:#9ee493; --warn:#ffd166;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+  a{color:var(--accent);text-decoration:none}
+  .wrap{max-width:880px;margin:32px auto;padding:0 16px}
+  header{display:flex;gap:12px;align-items:center;margin-bottom:16px}
+  header h1{font-size:22px;margin:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
+  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .row label{white-space:nowrap}
+  .chip{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+  input[type="date"], input[type="text"], textarea{
+    background:#0d1117;border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:8px 10px;width:100%;
+  }
+  textarea{min-height:72px;resize:vertical}
+  .checks{display:flex;flex-wrap:wrap;gap:8px}
+  .checks label{padding:8px 10px;border:1px solid var(--line);border-radius:10px;cursor:pointer}
+  .checks input{margin-right:6px}
+  .btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+  button{
+    background:#1b2532;border:1px solid var(--line);color:var(--ink);padding:10px 14px;border-radius:10px;cursor:pointer;
+  }
+  button.primary{background:var(--accent);color:#0b1117;border-color:transparent;font-weight:600}
+  button.ghost{background:transparent}
+  button.warn{background:#30220f;border-color:#4a3412}
+  .muted{color:var(--muted)}
+  details{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0}
+  details summary{cursor:pointer}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--line);margin-left:6px;color:var(--muted)}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1e2a38;border:1px solid var(--line);color:var(--ink);
+    padding:10px 14px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .25s}
+  .toast.show{opacity:1}
+  .divider{height:1px;background:var(--line);margin:12px 0}
+  .footer{color:var(--muted);font-size:13px;margin:20px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🐟 咸鱼修行 · 今日面板</h1>
+    <span class="pill" id="version">v0.1</span>
+  </header>
+
+  <!-- 日期 + 状态 -->
+  <section class="card" aria-labelledby="sec-date">
+    <h2 id="sec-date" style="margin:0 0 8px 0;font-size:18px;">📆 日期 & 🧘‍♀️ 今日状态</h2>
+    <div class="row" style="gap:16px">
+      <label for="date">日期：</label>
+      <input id="date" type="date" />
+    </div>
+    <div class="row" style="gap:12px;margin-top:8px">
+      <label class="chip"><input type="radio" name="status" value="终日无事">终日无事</label>
+      <label class="chip"><input type="radio" name="status" value="正常营业">正常营业</label>
+      <label class="chip"><input type="radio" name="status" value="累瘫了">累瘫了</label>
+      <label class="chip"><input type="radio" name="status" value="自由填">自由填</label>
+      <input id="statusCustom" type="text" placeholder="自定义状态（选“自由填”后生效）" />
+    </div>
+    <p class="muted" style="margin-top:6px">同一天只保留一条记录；再次保存会覆盖该日。</p>
+  </section>
+
+  <!-- 今日进度 -->
+  <section class="card" aria-labelledby="sec-progress">
+    <h2 id="sec-progress" style="margin:0 0 8px 0;font-size:18px;">📝 今日进度</h2>
+    <div class="checks" id="progressChecks">
+      <label><input type="checkbox" value="数学">数学</label>
+      <label><input type="checkbox" value="编程">编程</label>
+      <label><input type="checkbox" value="写作">写作</label>
+      <label><input type="checkbox" value="运动">运动</label>
+      <label><input type="checkbox" value="社交">社交</label>
+    </div>
+  </section>
+
+  <!-- 自定义输入 -->
+  <section class="card" aria-labelledby="sec-free">
+    <h2 id="sec-free" style="margin:0 0 8px 0;font-size:18px;">🍵 成就解锁 & 🎁 隐藏收获</h2>
+    <input id="achieve" type="text" placeholder="例：看了一节吴恩达 / 吃了一根冰棍" />
+    <div style="height:8px"></div>
+    <textarea id="secret" placeholder="今天悄悄完成了什么心事？（仅自己可见，存本地）"></textarea>
+  </section>
+
+  <!-- 结语 -->
+  <section class="card" aria-labelledby="sec-outro">
+    <h2 id="sec-outro" style="margin:0 0 8px 0;font-size:18px;">🐟 结语</h2>
+    <input id="outro" type="text" placeholder="留空则自动生成一条猫猫风格结语" />
+    <div class="btns">
+      <button class="ghost" id="btnAutoOutro">🎲 随机一句</button>
+    </div>
+  </section>
+
+  <!-- 操作按钮 -->
+  <section class="card" aria-labelledby="sec-actions">
+    <h2 id="sec-actions" style="margin:0 0 8px 0;font-size:18px;">⚙️ 操作</h2>
+    <div class="btns">
+      <button class="primary" id="btnSave">📌 保存记录</button>
+      <button id="btnLoad">🔎 载入当日（若已有）</button>
+      <button id="btnIdle">🔘 我选择终日无事！</button>
+      <button id="btnHistory">🕰️ 查看历史</button>
+      <button id="btnExportJson">📤 导出 JSON</button>
+      <button id="btnExportTxt">📤 导出 TXT</button>
+      <button class="warn" id="btnClearAll">🗑️ 清空全部</button>
+    </div>
+    <div class="divider"></div>
+    <p class="muted">数据仅保存在本机浏览器的 <code>localStorage</code> 中；换设备或清浏览数据会丢失。</p>
+  </section>
+
+  <!-- 历史区 -->
+  <section class="card" id="historySection" style="display:none" aria-labelledby="sec-history">
+    <h2 id="sec-history" style="margin:0 0 8px 0;font-size:18px;">📚 历史记录</h2>
+    <div id="historyList"></div>
+  </section>
+
+  <div class="footer">小提示：日期左侧有「载入当日」按钮，可把当日已存记录拉回表单编辑。</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ---- 小工具 ----
+  const STORAGE_KEY = 'fishlog.v1';
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+  function todayStr(){
+    // 本地时区安全的 YYYY-MM-DD
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+  function toast(msg,ms=1600){
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), ms);
+  }
+  function getStore(){
+    try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+    catch{ return {}; }
+  }
+  function setStore(obj){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+  }
+  function download(filename, content, type='application/json'){
+    const blob = new Blob([content], {type});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a);
+    a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  // ---- 结语库 & 生成器 ----
+  const QUOTES = [
+    "今天也在猫猫的怀里躺过一天～",
+    "风把日子吹得不紧不慢，我就慢慢走。",
+    "学习是正经事，咸鱼也是正经躺。",
+    "小步不嫌慢，停下也算在路上。",
+    "给脑袋一块草地，给心一声呵欠。"
+  ];
+  function autoOutro(rec){
+    // 根据状态/进度给一句默认结语
+    const checked = (rec.progress||[]).length;
+    const s = rec.status || '正常营业';
+    if(!checked && s.includes('无事')) return "今天我允许自己无事，猫猫伸个懒腰～";
+    if(checked >= 4) return "干得漂亮，猫猫今天是效率猛兽（温柔款）。";
+    if(checked >= 2) return "节奏对了就好，慢慢跑不掉。";
+    if(s.includes('累')) return "累就歇歇，歇是为了下一次更顺手。";
+    return QUOTES[Math.floor(Math.random()*QUOTES.length)];
+  }
+
+  // ---- 读/写表单 ----
+  function readForm(){
+    const date = $('#date').value || todayStr();
+    const statusRadio = document.querySelector('input[name="status"]:checked');
+    let status = statusRadio ? statusRadio.value : '';
+    if(status === '自由填'){
+      const custom = $('#statusCustom').value.trim();
+      if(custom) status = custom;
+    }
+    const progress = $$('#progressChecks input:checked').map(i=>i.value);
+    const achieve = $('#achieve').value.trim();
+    const secret = $('#secret').value.trim();
+    let outro = $('#outro').value.trim();
+
+    const rec = { date, status, progress, achieve, secret, outro };
+    if(!outro) rec.outro = autoOutro(rec);
+    return rec;
+  }
+  function writeForm(rec){
+    $('#date').value = rec.date || todayStr();
+    // 状态
+    let matched = false;
+    $$('#statusCustom').forEach(()=>{}); // no-op for consistency
+    $$('input[name="status"]').forEach(r=>{
+      r.checked = false;
+      if(rec.status && r.value === rec.status){ r.checked = true; matched = true; }
+    });
+    if(!matched && rec.status){
+      // 放到自由填
+      $$('input[name="status"]').forEach(r=>{ if(r.value==='自由填') r.checked = true; });
+      $('#statusCustom').value = rec.status;
+    }
+    // 进度
+    $$(`#progressChecks input`).forEach(i=>i.checked = (rec.progress||[]).includes(i.value));
+    $('#achieve').value = rec.achieve || '';
+    $('#secret').value = rec.secret || '';
+    $('#outro').value = rec.outro || '';
+  }
+
+  // ---- 保存/载入/历史 ----
+  function saveRecord(rec){
+    const store = getStore();
+    store[rec.date] = rec;
+    setStore(store);
+  }
+  function loadRecordByDate(date){
+    const rec = getStore()[date];
+    if(rec){ writeForm(rec); toast(`已载入 ${date} 的记录`); }
+    else{ toast(`没有找到 ${date} 的记录`); }
+  }
+  function renderHistory(){
+    const list = $('#historyList');
+    list.innerHTML = '';
+    const store = getStore();
+    const dates = Object.keys(store).sort((a,b)=>a<b?1:-1); // desc
+    if(!dates.length){
+      list.innerHTML = `<p class="muted">暂无记录。</p>`;
+      return;
+    }
+    dates.forEach(d=>{
+      const r = store[d];
+      const el = document.createElement('details');
+      el.innerHTML = `
+        <summary><strong>${d}</strong>
+          <span class="pill">${(r.status||'')}</span>
+          ${r.progress?.length ? `<span class="pill">${r.progress.join(' / ')}</span>` : ''}
+        </summary>
+        <div style="padding:8px 2px 0 2px">
+          ${r.achieve?`<div>🍵 成就：${escapeHTML(r.achieve)}</div>`:''}
+          ${r.secret?`<div>🎁 隐藏：${escapeHTML(r.secret)}</div>`:''}
+          ${r.outro?`<div>🐟 结语：${escapeHTML(r.outro)}</div>`:''}
+          <div class="btns" style="margin-top:8px">
+            <button data-act="load" data-date="${d}">↩️ 载入到表单</button>
+            <button data-act="delete" data-date="${d}" class="warn">🗑️ 删除该日</button>
+          </div>
+        </div>
+      `;
+      list.appendChild(el);
+    });
+    // 代理按钮事件
+    list.onclick = (e)=>{
+      const b = e.target.closest('button'); if(!b) return;
+      const date = b.getAttribute('data-date');
+      const act = b.getAttribute('data-act');
+      if(act==='load'){ loadRecordByDate(date); }
+      if(act==='delete'){
+        const ok = confirm(`确定删除 ${date} 这天的记录吗？此操作不可撤销。`);
+        if(ok){
+          const store = getStore(); delete store[date]; setStore(store);
+          renderHistory(); toast('已删除');
+        }
+      }
+    };
+  }
+  function escapeHTML(s){
+    return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---- 导出 ----
+  function exportJSON(){
+    const store = getStore();
+    const ordered = Object.keys(store).sort().reduce((acc,d)=>{acc[d]=store[d]; return acc;},{});
+    download(`fishlog-${todayStr()}.json`, JSON.stringify(ordered, null, 2));
+  }
+  function exportTXT(){
+    const store = getStore();
+    const dates = Object.keys(store).sort();
+    if(!dates.length){ toast('没有可导出的记录'); return; }
+    const lines = [];
+    dates.forEach(d=>{
+      const r = store[d];
+      lines.push(
+`[${d}]
+状态：${r.status||''}
+进度：${(r.progress||[]).join(' / ')||'-'}
+成就：${r.achieve||'-'}
+隐藏：${r.secret||'-'}
+结语：${r.outro||'-'}
+----------------------------------------`
+      );
+    });
+    download(`fishlog-${todayStr()}.txt`, lines.join('\n'), 'text/plain;charset=utf-8');
+  }
+
+  // ---- 一键终日无事 ----
+  function idleToday(){
+    $('#date').value = $('#date').value || todayStr();
+    $$('input[name="status"]').forEach(r=>r.checked = (r.value==='终日无事'));
+    $('#statusCustom').value = '';
+    $$(`#progressChecks input`).forEach(i=>i.checked=false);
+    $('#achieve').value='';
+    $('#secret').value='';
+    const rec = readForm();
+    rec.outro = "今天我允许自己无事，猫猫伸个懒腰～";
+    saveRecord(rec);
+    toast('已记录：终日无事');
+  }
+
+  // ---- 事件绑定 ----
+  function init(){
+    $('#date').value = todayStr();
+
+    $('#btnSave').onclick = ()=>{
+      const rec = readForm();
+      if(!rec.status) { toast('请先选择/填写「今日状态」'); return; }
+      saveRecord(rec); toast('已保存');
+    };
+    $('#btnLoad').onclick = ()=> loadRecordByDate($('#date').value || todayStr());
+    $('#btnHistory').onclick = ()=>{
+      const sec = $('#historySection');
+      sec.style.display = (sec.style.display==='none') ? '' : 'none';
+      if(sec.style.display!=='none'){ renderHistory(); sec.scrollIntoView({behavior:'smooth'}); }
+    };
+    $('#btnExportJson').onclick = exportJSON;
+    $('#btnExportTxt').onclick = exportTXT;
+    $('#btnClearAll').onclick = ()=>{
+      const ok = confirm('确定清空全部记录吗？此操作不可撤销！');
+      if(ok){ localStorage.removeItem(STORAGE_KEY); renderHistory(); toast('已清空'); }
+    };
+    $('#btnIdle').onclick = idleToday;
+    $('#btnAutoOutro').onclick = ()=>{
+      const rec = readForm();
+      $('#outro').value = autoOutro(rec);
+    };
+    // 切到“自由填”时聚焦输入
+    $$('input[name="status"]').forEach(r=>{
+      r.addEventListener('change', ()=>{
+        if(r.value==='自由填' && r.checked){ $('#statusCustom').focus(); }
+      });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
