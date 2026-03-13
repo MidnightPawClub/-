@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>拼豆库存管理器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif; background: #0f1117; color: #e8e8ed; }
+  *::-webkit-scrollbar { display: none; }
+  textarea::placeholder, input::placeholder { color: #555; }
+  button { cursor: pointer; }
+  button:hover { filter: brightness(1.15); }
+  button:active { transform: scale(0.97); }
+  @keyframes slideDown { from { opacity:0; transform:translate(-50%,-10px); } to { opacity:1; transform:translate(-50%,0); } }
+  #root { min-height: 100vh; }
+</style>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useCallback, useRef } = React;
+
+const COLOR_DATA = {
+  A: [
+    { id: "A1", hex: "#faf5cd" }, { id: "A2", hex: "#fcfed6" }, { id: "A3", hex: "#fcff92" },
+    { id: "A4", hex: "#f7ec5c" }, { id: "A5", hex: "#f0d83a" }, { id: "A6", hex: "#fda951" },
+    { id: "A7", hex: "#fa8c4f" }, { id: "A8", hex: "#fbda4d" }, { id: "A9", hex: "#f79d5f" },
+    { id: "A10", hex: "#f47e38" }, { id: "A11", hex: "#fedb99" }, { id: "A12", hex: "#fda276" },
+    { id: "A13", hex: "#fec667" }, { id: "A14", hex: "#f75842" }, { id: "A15", hex: "#fbf65e" },
+    { id: "A16", hex: "#feff97" }, { id: "A17", hex: "#fde173" }, { id: "A18", hex: "#fcbf80" },
+    { id: "A19", hex: "#fd7e77" }, { id: "A20", hex: "#f9d66e" }, { id: "A21", hex: "#fae393" },
+    { id: "A22", hex: "#edf878" }, { id: "A23", hex: "#e4c8ba" }, { id: "A24", hex: "#f3f6a9" },
+    { id: "A25", hex: "#ffd785" }, { id: "A26", hex: "#ffc734" },
+  ],
+  B: [
+    { id: "B1", hex: "#dff13b" }, { id: "B2", hex: "#64f343" }, { id: "B3", hex: "#a1f586" },
+    { id: "B4", hex: "#5fdf34" }, { id: "B5", hex: "#39e158" }, { id: "B6", hex: "#64e0a4" },
+    { id: "B7", hex: "#3eae7c" }, { id: "B8", hex: "#1d9b54" }, { id: "B9", hex: "#2a5037" },
+    { id: "B10", hex: "#9ad1ba" }, { id: "B11", hex: "#627032" }, { id: "B12", hex: "#1a6e3d" },
+    { id: "B13", hex: "#c8e87d" }, { id: "B14", hex: "#abe84f" }, { id: "B15", hex: "#305335" },
+    { id: "B16", hex: "#c0ed9c" }, { id: "B17", hex: "#9eb33e" }, { id: "B18", hex: "#e6ed4f" },
+    { id: "B19", hex: "#26b78e" }, { id: "B20", hex: "#cbeccf" }, { id: "B21", hex: "#18616a" },
+    { id: "B22", hex: "#0a4241" }, { id: "B23", hex: "#343b1a" }, { id: "B24", hex: "#e8faa6" },
+    { id: "B25", hex: "#4e846d" }, { id: "B26", hex: "#907c35" }, { id: "B27", hex: "#d0e0af" },
+    { id: "B28", hex: "#9ee5bb" }, { id: "B29", hex: "#c6df5f" }, { id: "B30", hex: "#e3fbb1" },
+    { id: "B31", hex: "#b4e691" }, { id: "B32", hex: "#92ad60" },
+  ],
+  C: [
+    { id: "C1", hex: "#f0fee4" }, { id: "C2", hex: "#abf8fe" }, { id: "C3", hex: "#a2e0f7" },
+    { id: "C4", hex: "#44cdfb" }, { id: "C5", hex: "#06aadf" }, { id: "C6", hex: "#54a7e9" },
+    { id: "C7", hex: "#3977ca" }, { id: "C8", hex: "#0f52bd" }, { id: "C9", hex: "#3349c3" },
+    { id: "C10", hex: "#3cbce3" }, { id: "C11", hex: "#2aded3" }, { id: "C12", hex: "#1e334e" },
+    { id: "C13", hex: "#cde7fe" }, { id: "C14", hex: "#d5fcf7" }, { id: "C15", hex: "#21c5c4" },
+    { id: "C16", hex: "#1858a2" }, { id: "C17", hex: "#02d1f3" }, { id: "C18", hex: "#213244" },
+    { id: "C19", hex: "#18869d" }, { id: "C20", hex: "#1a70a9" }, { id: "C21", hex: "#bcddfc" },
+    { id: "C22", hex: "#6bb1bb" }, { id: "C23", hex: "#c8e2fd" }, { id: "C24", hex: "#7ec5f9" },
+    { id: "C25", hex: "#a9e8e0" }, { id: "C26", hex: "#42adcf" }, { id: "C27", hex: "#d0def9" },
+    { id: "C28", hex: "#bdcee8" }, { id: "C29", hex: "#364a89" },
+  ],
+  D: [
+    { id: "D1", hex: "#acb7ef" }, { id: "D2", hex: "#868dd3" }, { id: "D3", hex: "#3554af" },
+    { id: "D4", hex: "#162d7b" }, { id: "D5", hex: "#b34ec6" }, { id: "D6", hex: "#b37bdc" },
+    { id: "D7", hex: "#8758a9" }, { id: "D8", hex: "#e3d2fe" }, { id: "D9", hex: "#d5b9f4" },
+    { id: "D10", hex: "#301a49" }, { id: "D11", hex: "#beb9e2" }, { id: "D12", hex: "#dc99ce" },
+    { id: "D13", hex: "#b5038d" }, { id: "D14", hex: "#862993" }, { id: "D15", hex: "#2f1f8c" },
+    { id: "D16", hex: "#e2e4f0" }, { id: "D17", hex: "#c7d3f9" }, { id: "D18", hex: "#9a64b8" },
+    { id: "D19", hex: "#d8c2d9" }, { id: "D20", hex: "#9a35ad" }, { id: "D21", hex: "#940595" },
+    { id: "D22", hex: "#38389a" }, { id: "D23", hex: "#eadbf8" }, { id: "D24", hex: "#768ae1" },
+    { id: "D25", hex: "#4950c2" }, { id: "D26", hex: "#d6c6eb" },
+  ],
+  E: [
+    { id: "E1", hex: "#f6d4cb" }, { id: "E2", hex: "#fcc1dd" }, { id: "E3", hex: "#f6bde8" },
+    { id: "E4", hex: "#e8649e" }, { id: "E5", hex: "#f0569f" }, { id: "E6", hex: "#eb4172" },
+    { id: "E7", hex: "#c53674" }, { id: "E8", hex: "#fddbe9" }, { id: "E9", hex: "#e376c7" },
+    { id: "E10", hex: "#d13b95" }, { id: "E11", hex: "#f7dad4" }, { id: "E12", hex: "#f693bf" },
+    { id: "E13", hex: "#b5026a" }, { id: "E14", hex: "#fad4bf" }, { id: "E15", hex: "#f5c9ca" },
+    { id: "E16", hex: "#fbf4ec" }, { id: "E17", hex: "#f7e3ec" }, { id: "E18", hex: "#f9c8db" },
+    { id: "E19", hex: "#f6bbd1" }, { id: "E20", hex: "#d7c6ce" }, { id: "E21", hex: "#c09da4" },
+    { id: "E22", hex: "#b38c9f" }, { id: "E23", hex: "#937d8a" }, { id: "E24", hex: "#debee5" },
+  ],
+  F: [
+    { id: "F1", hex: "#fe9381" }, { id: "F2", hex: "#f63d4b" }, { id: "F3", hex: "#ee4e3e" },
+    { id: "F4", hex: "#fb2a40" }, { id: "F5", hex: "#e10328" }, { id: "F6", hex: "#913635" },
+    { id: "F7", hex: "#911932" }, { id: "F8", hex: "#bb0126" }, { id: "F9", hex: "#e0677a" },
+    { id: "F10", hex: "#874628" }, { id: "F11", hex: "#592323" }, { id: "F12", hex: "#f3536b" },
+    { id: "F13", hex: "#f45c45" }, { id: "F14", hex: "#fcadb2" }, { id: "F15", hex: "#d50527" },
+    { id: "F16", hex: "#f8c0a9" }, { id: "F17", hex: "#e89b7d" }, { id: "F18", hex: "#d07f4a" },
+    { id: "F19", hex: "#be454a" }, { id: "F20", hex: "#c69495" }, { id: "F21", hex: "#f2b8c6" },
+    { id: "F22", hex: "#f7c3d0" }, { id: "F23", hex: "#ed806c" }, { id: "F24", hex: "#e09daf" },
+    { id: "F25", hex: "#e84854" },
+  ],
+  G: [
+    { id: "G1", hex: "#ffe4d3" }, { id: "G2", hex: "#fcc6ac" }, { id: "G3", hex: "#f1c4a5" },
+    { id: "G4", hex: "#dcb387" }, { id: "G5", hex: "#e7b34e" }, { id: "G6", hex: "#e3a014" },
+    { id: "G7", hex: "#985c3a" }, { id: "G8", hex: "#713d2f" }, { id: "G9", hex: "#e4b685" },
+    { id: "G10", hex: "#da8c42" }, { id: "G11", hex: "#dac898" }, { id: "G12", hex: "#fec993" },
+    { id: "G13", hex: "#b2714b" }, { id: "G14", hex: "#8b684c" }, { id: "G15", hex: "#f6f8e3" },
+    { id: "G16", hex: "#f2d8c1" }, { id: "G17", hex: "#77544e" }, { id: "G18", hex: "#ffe3d5" },
+    { id: "G19", hex: "#dd7d41" }, { id: "G20", hex: "#a5452f" }, { id: "G21", hex: "#b38561" },
+  ],
+  H: [
+    { id: "H1", hex: "#ffffff" }, { id: "H2", hex: "#fbfbfb" }, { id: "H3", hex: "#b4b4b4" },
+    { id: "H4", hex: "#878787" }, { id: "H5", hex: "#464648" }, { id: "H6", hex: "#2c2c2c" },
+    { id: "H7", hex: "#010101" }, { id: "H8", hex: "#e7d6dc" }, { id: "H9", hex: "#efedee" },
+    { id: "H10", hex: "#ebebeb" }, { id: "H11", hex: "#cdcdcd" }, { id: "H12", hex: "#fdf6ee" },
+    { id: "H13", hex: "#f4efd1" }, { id: "H14", hex: "#ced7d4" }, { id: "H15", hex: "#9aa6a6" },
+    { id: "H16", hex: "#1b1213" }, { id: "H17", hex: "#f0eeef" }, { id: "H18", hex: "#fcfff6" },
+    { id: "H19", hex: "#f2eee5" }, { id: "H20", hex: "#96a09f" }, { id: "H21", hex: "#f8fbe6" },
+    { id: "H22", hex: "#cacad2" }, { id: "H23", hex: "#9b9c94" },
+  ],
+  M: [
+    { id: "M1", hex: "#bbc6b6" }, { id: "M2", hex: "#909994" }, { id: "M3", hex: "#697e81" },
+    { id: "M4", hex: "#e0d4bc" }, { id: "M5", hex: "#d1ccaf" }, { id: "M6", hex: "#b0aa86" },
+    { id: "M7", hex: "#b0a796" }, { id: "M8", hex: "#ae8082" }, { id: "M9", hex: "#a68862" },
+    { id: "M10", hex: "#c4b3bb" }, { id: "M11", hex: "#9d7693" }, { id: "M12", hex: "#644b51" },
+    { id: "M13", hex: "#c79266" }, { id: "M14", hex: "#c27563" }, { id: "M15", hex: "#747d7a" },
+  ],
+};
+
+const ALL_COLOR_IDS = Object.values(COLOR_DATA).flat().map(c => c.id);
+const COLOR_MAP = {};
+Object.values(COLOR_DATA).flat().forEach(c => { COLOR_MAP[c.id] = c; });
+const GROUPS = Object.keys(COLOR_DATA);
+const GROUP_LABELS = { A:"A 暖黄橙", B:"B 绿色系", C:"C 蓝青系", D:"D 紫色系", E:"E 粉色系", F:"F 红色系", G:"G 棕肤系", H:"H 灰白黑", M:"M 莫兰迪" };
+const HIGH_USE = ["H1","H2","H7","E16"];
+const PACK_SIZES = [500,1000,2000,6000];
+const VALID_RESTOCK_QTY = new Set(PACK_SIZES);
+
+function isLightColor(hex) { const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16); return (r*299+g*587+b*114)/1000>160; }
+function formatTime(ts) { const d=new Date(ts),pad=n=>String(n).padStart(2,"0"); return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function loadJSON(key) { try { const v=localStorage.getItem(key); return v?JSON.parse(v):null; } catch{return null;} }
+function saveJSON(key,val) { try{localStorage.setItem(key,JSON.stringify(val));}catch(e){console.error("Save failed",e);} }
+function getThreshold(cid) { return HIGH_USE.includes(cid)?300:100; }
+function getMinPack(cid) { return HIGH_USE.includes(cid)?1000:500; }
+
+function parseTextInput(text) {
+  const items=[],errors=[];
+  text.split("\n").forEach((line,i) => {
+    const t=line.trim(); if(!t) return;
+    const parts=t.split(/\s+/);
+    if(parts.length<2){errors.push(`第${i+1}行格式错误: "${t}"`);return;}
+    const colorId=parts[0].toUpperCase(),qty=parseInt(parts[1],10);
+    if(!COLOR_MAP[colorId]){errors.push(`第${i+1}行色号不存在: ${colorId}`);return;}
+    if(isNaN(qty)||qty<=0){errors.push(`第${i+1}行数量无效: ${parts[1]}`);return;}
+    items.push({colorId,qty});
+  });
+  return {items,errors};
+}
+
+const TEXT_EXAMPLE = "A1 200\nH7 500\nB3 150";
+
+function App() {
+  const [inventory,setInventory]=useState(()=>loadJSON("perler-inventory")||{});
+  const [history,setHistory]=useState(()=>loadJSON("perler-history")||[]);
+  const [activeGroup,setActiveGroup]=useState("A");
+  const [view,setView]=useState("inventory");
+  const [searchTerm,setSearchTerm]=useState("");
+  const fileInputRef=useRef(null);
+  const [toast,setToast]=useState(null);
+  const [consumeText,setConsumeText]=useState("");
+  const [consumeError,setConsumeError]=useState(null);
+  const [restockText,setRestockText]=useState("");
+  const [restockError,setRestockError]=useState(null);
+  const [projectText,setProjectText]=useState("");
+
+  const saveData=useCallback((inv,hist)=>{saveJSON("perler-inventory",inv);saveJSON("perler-history",hist);},[]);
+  const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),2500);};
+  const copyToClipboard=(text)=>{navigator.clipboard.writeText(text).then(()=>showToast("已复制")).catch(()=>showToast("复制失败","error"));};
+
+  const submitConsume=()=>{
+    const {items,errors}=parseTextInput(consumeText);
+    if(errors.length>0){setConsumeError(errors.join("\n"));return;}
+    if(items.length===0){setConsumeError("请输入至少一行");return;}
+    const merged={};
+    items.forEach(it=>{merged[it.colorId]=(merged[it.colorId]||0)+it.qty;});
+    const mergedItems=Object.entries(merged).map(([colorId,qty])=>({colorId,qty}));
+    const shortage=mergedItems.filter(r=>(inventory[r.colorId]||0)<r.qty);
+    if(shortage.length>0){
+      setConsumeError(`库存不足:\n${shortage.map(r=>`${r.colorId} 缺少 ${r.qty-(inventory[r.colorId]||0)} 颗 (库存${inventory[r.colorId]||0}/需要${r.qty})`).join("\n")}`);return;
+    }
+    const newInv={...inventory};
+    mergedItems.forEach(r=>{newInv[r.colorId]=(newInv[r.colorId]||0)-r.qty;});
+    const entry={id:Date.now(),type:"consume",items:mergedItems,timestamp:Date.now()};
+    const newHist=[entry,...history];
+    setInventory(newInv);setHistory(newHist);saveData(newInv,newHist);
+    setConsumeError(null);setConsumeText("");
+    showToast("消耗已保存");setView("inventory");
+  };
+
+  const submitRestock=()=>{
+    const {items,errors}=parseTextInput(restockText);
+    if(errors.length>0){setRestockError(errors.join("\n"));return;}
+    if(items.length===0){setRestockError("请输入至少一行");return;}
+    const invalidQty=items.filter(r=>!VALID_RESTOCK_QTY.has(r.qty));
+    if(invalidQty.length>0){
+      setRestockError(`数量必须为 500/1000/2000/6000:\n${invalidQty.map(r=>`${r.colorId} ${r.qty}`).join("\n")}`);return;
+    }
+    const newInv={...inventory};
+    items.forEach(r=>{newInv[r.colorId]=(newInv[r.colorId]||0)+r.qty;});
+    const entry={id:Date.now(),type:"restock",items,timestamp:Date.now()};
+    const newHist=[entry,...history];
+    setInventory(newInv);setHistory(newHist);saveData(newInv,newHist);
+    setRestockError(null);setRestockText("");showToast("补货已入库");
+  };
+
+  const undoHistory=(entryId)=>{
+    const entry=history.find(h=>h.id===entryId); if(!entry) return;
+    const newInv={...inventory};
+    entry.items.forEach(item=>{
+      if(entry.type==="restock") newInv[item.colorId]=Math.max(0,(newInv[item.colorId]||0)-item.qty);
+      else newInv[item.colorId]=(newInv[item.colorId]||0)+item.qty;
+    });
+    const newHist=history.filter(h=>h.id!==entryId);
+    setInventory(newInv);setHistory(newHist);saveData(newInv,newHist);showToast("已撤回");
+  };
+
+  const exportData=()=>{
+    const data=JSON.stringify({inventory,history,exportedAt:new Date().toISOString()},null,2);
+    const blob=new Blob([data],{type:"application/json"});
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;
+    a.download=`perler-inventory-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();URL.revokeObjectURL(url);showToast("导出成功");
+  };
+  const importData=(e)=>{
+    const file=e.target.files?.[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      try{
+        const data=JSON.parse(ev.target.result);
+        if(!data.inventory||typeof data.inventory!=="object"){showToast("文件格式错误","error");return;}
+        setInventory(data.inventory);setHistory(data.history||[]);
+        saveData(data.inventory,data.history||[]);showToast("导入成功");
+      }catch{showToast("JSON解析失败","error");}
+    };
+    reader.readAsText(file);e.target.value="";
+  };
+
+  const calcRestockPack=(colorId,stockAfterConsume)=>{
+    const threshold=getThreshold(colorId),minPack=getMinPack(colorId);
+    if(stockAfterConsume>threshold) return null;
+    const needed=threshold-stockAfterConsume+1;
+    for(const p of PACK_SIZES){if(p>=needed&&p>=minPack) return p;}
+    return PACK_SIZES[PACK_SIZES.length-1];
+  };
+
+  const computeRestockList=(extraConsume={})=>{
+    const result=[];
+    ALL_COLOR_IDS.forEach(cid=>{
+      const stock=inventory[cid]||0,consume=extraConsume[cid]||0;
+      if(stock===0&&consume===0) return;
+      const afterConsume=stock-consume;
+      const pack=calcRestockPack(cid,afterConsume);
+      if(pack!==null) result.push({colorId:cid,stock,consume,afterConsume,pack,remaining:afterConsume+pack});
+    });
+    return result;
+  };
+
+  const getProjectConsume=()=>{
+    if(!projectText.trim()) return {consume:{},errors:[]};
+    const {items,errors}=parseTextInput(projectText);
+    const consume={};
+    items.forEach(r=>{consume[r.colorId]=(consume[r.colorId]||0)+r.qty;});
+    return {consume,errors};
+  };
+
+  const groupByPack=(list)=>{
+    const groups={};
+    list.forEach(item=>{if(!groups[item.pack]) groups[item.pack]=[];groups[item.pack].push(item);});
+    return groups;
+  };
+
+  const makePackText=(items,pack)=>items.map(it=>`${it.colorId} ${pack}`).join("\n");
+
+  const getFilteredColors=()=>{
+    const colors=COLOR_DATA[activeGroup]||[];
+    if(!searchTerm) return colors;
+    return colors.filter(c=>c.id.toLowerCase().includes(searchTerm.toLowerCase()));
+  };
+
+  const S={
+    header:{background:"linear-gradient(135deg,#1a1b26 0%,#1f2133 100%)",borderBottom:"1px solid rgba(255,255,255,0.06)",padding:"16px 20px 12px",position:"sticky",top:0,zIndex:100},
+    title:{fontSize:18,fontWeight:700,letterSpacing:"0.5px",margin:0,background:"linear-gradient(90deg,#ff6b6b,#ffa06b,#ffd06b)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"},
+    navRow:{display:"flex",gap:6,marginTop:12,overflowX:"auto",paddingBottom:4},
+    navBtn:(a)=>({padding:"6px 14px",borderRadius:20,border:"none",fontSize:13,fontWeight:600,whiteSpace:"nowrap",transition:"all 0.2s",background:a?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.04)",color:a?"#fff":"#888"}),
+    viewTabs:{display:"flex",gap:0,margin:"12px 20px 0",background:"rgba(255,255,255,0.04)",borderRadius:12,padding:3},
+    viewTab:(a)=>({flex:1,padding:"8px 0",border:"none",borderRadius:10,fontSize:12,fontWeight:600,transition:"all 0.2s",background:a?"rgba(255,255,255,0.12)":"transparent",color:a?"#fff":"#666"}),
+    grid:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10,padding:"0 20px 100px"},
+    card:{background:"rgba(255,255,255,0.04)",borderRadius:14,padding:"14px 12px",display:"flex",flexDirection:"column",alignItems:"center",gap:8,border:"1px solid rgba(255,255,255,0.06)"},
+    swatch:(hex)=>({width:44,height:44,borderRadius:"50%",background:hex,border:isLightColor(hex)?"2px solid rgba(0,0,0,0.1)":"2px solid rgba(255,255,255,0.15)",boxShadow:`0 2px 12px ${hex}44`}),
+    colorLabel:{fontSize:13,fontWeight:700,letterSpacing:"0.5px",color:"#ccc"},
+    stockNum:(val,cid)=>({fontSize:18,fontWeight:800,color:val===0?"#555":val<=getThreshold(cid)?"#ff6b6b":"#7bed9f",fontVariantNumeric:"tabular-nums"}),
+    textarea:{width:"100%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"12px 14px",color:"#fff",fontSize:13,fontFamily:"'SF Mono',Menlo,monospace",outline:"none",resize:"vertical",lineHeight:1.6,minHeight:80},
+    panel:{background:"rgba(255,255,255,0.03)",borderRadius:14,border:"1px solid rgba(255,255,255,0.06)",padding:16,marginBottom:14},
+    historyItem:{background:"rgba(255,255,255,0.04)",borderRadius:12,padding:"14px 16px",marginBottom:10,border:"1px solid rgba(255,255,255,0.06)"},
+    toast:(type)=>({position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",padding:"10px 24px",borderRadius:12,fontSize:14,fontWeight:600,zIndex:9999,background:type==="error"?"#ff4757":"#2ed573",color:"#fff",boxShadow:"0 4px 20px rgba(0,0,0,0.4)",animation:"slideDown 0.3s ease"}),
+    btn:(c)=>({padding:"10px 24px",borderRadius:12,border:"none",fontSize:14,fontWeight:700,background:c==="green"?"rgba(46,213,115,0.15)":c==="red"?"rgba(255,71,87,0.15)":c==="blue"?"rgba(116,185,255,0.15)":"rgba(255,255,255,0.08)",color:c==="green"?"#2ed573":c==="red"?"#ff4757":c==="blue"?"#74b9ff":"#aaa"}),
+    errBox:{background:"rgba(255,71,87,0.1)",border:"1px solid rgba(255,71,87,0.3)",borderRadius:12,padding:"12px 16px",marginTop:12,color:"#ff6b81",fontSize:12,whiteSpace:"pre-line",lineHeight:1.6},
+    hint:{fontSize:11,color:"#555",marginBottom:8,fontFamily:"'SF Mono',Menlo,monospace",lineHeight:1.5},
+    copyTextBox:{background:"rgba(255,255,255,0.04)",borderRadius:10,padding:"10px 14px",fontSize:12,fontFamily:"'SF Mono',Menlo,monospace",color:"#bbb",whiteSpace:"pre-line",lineHeight:1.6,marginTop:10},
+  };
+
+  const SectionTitle=({children})=><div style={{fontSize:14,fontWeight:700,color:"#aaa",marginBottom:10}}>{children}</div>;
+
+  return (
+    <div style={{fontFamily:"-apple-system,'SF Pro Display','Helvetica Neue',sans-serif",background:"#0f1117",color:"#e8e8ed",minHeight:"100vh"}}>
+      {toast&&<div style={S.toast(toast.type)}>{toast.msg}</div>}
+      <div style={S.header}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <h1 style={S.title}>拼豆库存管理器</h1>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={exportData} style={{...S.btn(),padding:"6px 12px",fontSize:12}}>导出</button>
+            <button onClick={()=>fileInputRef.current?.click()} style={{...S.btn(),padding:"6px 12px",fontSize:12}}>导入</button>
+            <input ref={fileInputRef} type="file" accept=".json" onChange={importData} style={{display:"none"}} />
+          </div>
+        </div>
+        <div style={S.viewTabs}>
+          {[["inventory","库存总览"],["consume","消耗记录"],["restockList","补货清单"],["history","操作历史"]].map(([k,l])=>(
+            <button key={k} onClick={()=>setView(k)} style={S.viewTab(view===k)}>{l}</button>
+          ))}
+        </div>
+        {view==="inventory"&&(
+          <>
+            <div style={S.navRow}>
+              {GROUPS.map(g=><button key={g} onClick={()=>setActiveGroup(g)} style={S.navBtn(activeGroup===g)}>{GROUP_LABELS[g]}</button>)}
+            </div>
+            <div style={{marginTop:10}}>
+              <input type="text" placeholder="搜索色号..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}
+                style={{width:"100%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"8px 14px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}} />
+            </div>
+          </>
+        )}
+      </div>
+
+      {view==="inventory"&&(
+        <div style={{padding:"16px 20px 100px"}}>
+          <div style={S.panel}>
+            <SectionTitle>快速补货</SectionTitle>
+            <div style={S.hint}>每行格式：色号 数量（仅限 500/1000/2000/6000）<br/>例：H7 1000</div>
+            <textarea style={S.textarea} placeholder={TEXT_EXAMPLE} value={restockText} onChange={e=>setRestockText(e.target.value)} rows={4} />
+            {restockError&&<div style={S.errBox}>{restockError}</div>}
+            <div style={{marginTop:12}}><button onClick={submitRestock} style={S.btn("green")}>确认补货</button></div>
+          </div>
+          <div style={S.grid}>
+            {getFilteredColors().map(color=>{
+              const stock=inventory[color.id]||0;
+              return (
+                <div key={color.id} style={S.card}>
+                  <div style={S.swatch(color.hex)} />
+                  <div style={S.colorLabel}>{color.id}</div>
+                  <div style={S.stockNum(stock,color.id)}>{stock}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {view==="consume"&&(
+        <div style={{padding:20,maxWidth:540,margin:"0 auto"}}>
+          <SectionTitle>填入消耗的色号和数量</SectionTitle>
+          <div style={S.hint}>每行格式：色号 数量<br/>例：A1 200</div>
+          <textarea style={S.textarea} placeholder={TEXT_EXAMPLE} value={consumeText} onChange={e=>setConsumeText(e.target.value)} rows={8} />
+          {consumeError&&<div style={S.errBox}>{consumeError}</div>}
+          <div style={{marginTop:14}}><button onClick={submitConsume} style={S.btn("green")}>保存消耗</button></div>
+        </div>
+      )}
+
+      {view==="restockList"&&(()=>{
+        const {consume:projConsume,errors}=getProjectConsume();
+        const hasProject=Object.keys(projConsume).length>0;
+        const restockItems=computeRestockList(projConsume);
+        const grouped=groupByPack(restockItems);
+        const sortedPacks=Object.keys(grouped).map(Number).sort((a,b)=>a-b);
+        return (
+          <div style={{padding:"16px 20px 100px"}}>
+            <div style={S.panel}>
+              <SectionTitle>新作品用量（可选）</SectionTitle>
+              <div style={S.hint}>每行格式：色号 数量<br/>例：A1 200</div>
+              <textarea style={S.textarea} placeholder={TEXT_EXAMPLE} value={projectText} onChange={e=>setProjectText(e.target.value)} rows={5} />
+              {errors.length>0&&<div style={S.errBox}>{errors.join("\n")}</div>}
+            </div>
+            {restockItems.length===0?(
+              <div style={{textAlign:"center",color:"#555",marginTop:40,fontSize:14}}>
+                {hasProject?"所有颜色库存充足，无需补货":"当前无标红色号，无需补货"}
+              </div>
+            ):(
+              <>
+                {hasProject&&(
+                  <div style={{fontSize:12,color:"#888",marginBottom:14,padding:"8px 12px",background:"rgba(255,165,2,0.06)",borderRadius:10,lineHeight:1.6}}>
+                    已合并：当前标红色号 + 新作品消耗后会标红的色号
+                  </div>
+                )}
+                {sortedPacks.map(pack=>{
+                  const items=grouped[pack];
+                  const packText=makePackText(items,pack);
+                  return (
+                    <div key={pack} style={S.panel}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                        <span style={{fontSize:15,fontWeight:800,color:pack===500?"#7bed9f":pack===1000?"#ffa502":pack===2000?"#ff6b6b":"#a55eea"}}>{pack}粒/包</span>
+                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                          <span style={{fontSize:12,fontWeight:700,color:"#888",background:"rgba(255,255,255,0.06)",padding:"3px 10px",borderRadius:8}}>共 {items.length} 包</span>
+                          <button onClick={()=>copyToClipboard(packText)} style={{...S.btn("blue"),padding:"4px 12px",fontSize:11}}>复制</button>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                        {items.map(item=>(
+                          <div key={item.colorId} style={{display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"5px 10px"}}>
+                            <div style={{width:18,height:18,borderRadius:"50%",background:COLOR_MAP[item.colorId]?.hex||"#333",border:isLightColor(COLOR_MAP[item.colorId]?.hex||"#333")?"1px solid rgba(0,0,0,0.1)":"1px solid rgba(255,255,255,0.15)"}} />
+                            <span style={{fontSize:12,fontWeight:700,color:"#ccc"}}>{item.colorId}</span>
+                            {hasProject&&<span style={{fontSize:10,color:"#7bed9f"}}>余{item.remaining}</span>}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={S.copyTextBox}>{packText}</div>
+                    </div>
+                  );
+                })}
+                <div style={{background:"rgba(255,255,255,0.06)",borderRadius:12,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:13,fontWeight:600,color:"#aaa"}}>补货总计</span>
+                  <div style={{display:"flex",gap:14}}>
+                    {sortedPacks.map(pack=><span key={pack} style={{fontSize:13,fontWeight:700,color:"#ddd"}}>{pack}粒×{grouped[pack].length}</span>)}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
+
+      {view==="history"&&(
+        <div style={{padding:"16px 20px 100px"}}>
+          {history.length===0?(
+            <div style={{textAlign:"center",color:"#555",marginTop:60,fontSize:14}}>暂无操作记录</div>
+          ):history.map(entry=>(
+            <div key={entry.id} style={S.historyItem}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                <div>
+                  <span style={{display:"inline-block",padding:"2px 10px",borderRadius:6,fontSize:11,fontWeight:700,background:entry.type==="restock"?"rgba(46,213,115,0.12)":"rgba(255,165,2,0.12)",color:entry.type==="restock"?"#2ed573":"#ffa502",marginRight:8}}>
+                    {entry.type==="restock"?"补货":"消耗"}
+                  </span>
+                  <span style={{fontSize:12,color:"#666"}}>{formatTime(entry.timestamp)}</span>
+                </div>
+                <button onClick={()=>undoHistory(entry.id)} style={{...S.btn("red"),padding:"4px 12px",fontSize:12}}>撤回</button>
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {entry.items.map((item,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"4px 10px"}}>
+                    <div style={{width:16,height:16,borderRadius:"50%",background:COLOR_MAP[item.colorId]?.hex||"#333",border:"1px solid rgba(255,255,255,0.1)"}} />
+                    <span style={{fontSize:12,fontWeight:600,color:"#bbb"}}>{item.colorId}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:entry.type==="restock"?"#7bed9f":"#ffa502"}}>
+                      {entry.type==="restock"?"+":"-"}{item.qty}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
