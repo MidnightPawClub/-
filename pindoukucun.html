@@ -160,16 +160,40 @@ const COLOR_MAP = {};
 Object.values(COLOR_DATA).flat().forEach(c => { COLOR_MAP[c.id] = c; });
 const GROUPS = Object.keys(COLOR_DATA);
 const GROUP_LABELS = { A:"A 暖黄橙", B:"B 绿色系", C:"C 蓝青系", D:"D 紫色系", E:"E 粉色系", F:"F 红色系", G:"G 棕肤系", H:"H 灰白黑", M:"M 莫兰迪", P:"P 珠光", Q:"Q 温变", R:"R 果冻水晶", T:"T 透明", Y:"Y 夜光" };
-const HIGH_USE = ["H1","H2","H7","E16"];
 const PACK_SIZES = [500,1000,2000,6000];
 const VALID_RESTOCK_QTY = new Set(PACK_SIZES);
+const DEFAULT_TC = { normal:{threshold:100,minPack:500}, special:[{ids:["H1","H2","H7","E16"],threshold:300,minPack:1000}] };
 
 function isLightColor(hex) { const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16); return (r*299+g*587+b*114)/1000>160; }
 function formatTime(ts) { const d=new Date(ts),pad=n=>String(n).padStart(2,"0"); return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function loadJSON(key) { try { const v=localStorage.getItem(key); return v?JSON.parse(v):null; } catch{return null;} }
 function saveJSON(key,val) { try{localStorage.setItem(key,JSON.stringify(val));}catch(e){console.error("Save failed",e);} }
-function getThreshold(cid) { return HIGH_USE.includes(cid)?300:100; }
-function getMinPack(cid) { return HIGH_USE.includes(cid)?1000:500; }
+
+function tcGetThreshold(tc,cid) { for(const g of tc.special){if(g.ids.includes(cid)) return g.threshold;} return tc.normal.threshold; }
+function tcGetMinPack(tc,cid) { for(const g of tc.special){if(g.ids.includes(cid)) return g.minPack;} return tc.normal.minPack; }
+// Merge display groups: combine special groups with identical threshold+minPack
+function tcMergedDisplay(tc) {
+  const map=new Map();
+  tc.special.forEach(g=>{
+    const key=`${g.threshold}-${g.minPack}`;
+    if(!map.has(key)) map.set(key,{threshold:g.threshold,minPack:g.minPack,ids:[]});
+    map.get(key).ids.push(...g.ids);
+  });
+  return Array.from(map.values());
+}
+// Normalize: remove special groups identical to normal, dedupe ids (last wins)
+function tcNormalize(tc) {
+  // Last-wins: iterate all special groups, later overrides earlier for same id
+  const idMap=new Map();
+  tc.special.forEach((g,gi)=>g.ids.forEach(id=>idMap.set(id,gi)));
+  // Rebuild special groups with deduped ids
+  let rebuilt=tc.special.map((g,gi)=>({...g,ids:g.ids.filter(id=>idMap.get(id)===gi)}));
+  // Remove groups identical to normal
+  rebuilt=rebuilt.filter(g=>!(g.threshold===tc.normal.threshold&&g.minPack===tc.normal.minPack));
+  // Remove empty groups
+  rebuilt=rebuilt.filter(g=>g.ids.length>0);
+  return {...tc,special:rebuilt};
+}
 
 function parseTextInput(text) {
   const items=[],errors=[];
@@ -200,8 +224,16 @@ function App() {
   const [restockText,setRestockText]=useState("");
   const [restockError,setRestockError]=useState(null);
   const [projectText,setProjectText]=useState("");
+  const [tc,setTc]=useState(()=>loadJSON("perler-threshold")||DEFAULT_TC);
+  const [showSettings,setShowSettings]=useState(false);
+  const [editNormal,setEditNormal]=useState(null); // {threshold,minPack}
+  const [editSpecial,setEditSpecial]=useState(null); // [{ids:"",threshold,minPack}]
+
+  const getThreshold=(cid)=>tcGetThreshold(tc,cid);
+  const getMinPack=(cid)=>tcGetMinPack(tc,cid);
 
   const saveData=useCallback((inv,hist)=>{saveJSON("perler-inventory",inv);saveJSON("perler-history",hist);},[]);
+  const saveTc=(newTc)=>{const n=tcNormalize(newTc);setTc(n);saveJSON("perler-threshold",n);};
   const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),2500);};
   const copyToClipboard=(text)=>{navigator.clipboard.writeText(text).then(()=>showToast("已复制")).catch(()=>showToast("复制失败","error"));};
 
@@ -253,7 +285,7 @@ function App() {
   };
 
   const exportData=()=>{
-    const data=JSON.stringify({inventory,history,exportedAt:new Date().toISOString()},null,2);
+    const data=JSON.stringify({inventory,history,thresholdConfig:tc,exportedAt:new Date().toISOString()},null,2);
     const blob=new Blob([data],{type:"application/json"});
     const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;
     a.download=`perler-inventory-${new Date().toISOString().slice(0,10)}.json`;
@@ -267,6 +299,7 @@ function App() {
         const data=JSON.parse(ev.target.result);
         if(!data.inventory||typeof data.inventory!=="object"){showToast("文件格式错误","error");return;}
         setInventory(data.inventory);setHistory(data.history||[]);
+        if(data.thresholdConfig) saveTc(data.thresholdConfig);
         saveData(data.inventory,data.history||[]);showToast("导入成功");
       }catch{showToast("JSON解析失败","error");}
     };
@@ -409,8 +442,112 @@ function App() {
         const restockItems=computeRestockList(projConsume);
         const grouped=groupByPack(restockItems);
         const sortedPacks=Object.keys(grouped).map(Number).sort((a,b)=>a-b);
+        const mergedDisplay=tcMergedDisplay(tc);
+
+        const openSettings=()=>{
+          setEditNormal({threshold:tc.normal.threshold,minPack:tc.normal.minPack});
+          setEditSpecial([]);
+          setShowSettings(true);
+        };
+        const saveSettings=()=>{
+          const newTc=JSON.parse(JSON.stringify(tc));
+          if(editNormal){
+            const t=parseInt(editNormal.threshold,10);
+            const m=parseInt(editNormal.minPack,10);
+            if(!isNaN(t)&&t>0) newTc.normal.threshold=t;
+            if(PACK_SIZES.includes(m)) newTc.normal.minPack=m;
+          }
+          // Append new special groups
+          editSpecial.forEach(g=>{
+            const ids=g.ids.trim().split(/\s+/).map(s=>s.toUpperCase()).filter(s=>COLOR_MAP[s]);
+            const t=parseInt(g.threshold,10);
+            const m=parseInt(g.minPack,10);
+            if(ids.length>0) newTc.special.push({
+              ids,
+              threshold:(!isNaN(t)&&t>0)?t:newTc.normal.threshold,
+              minPack:PACK_SIZES.includes(m)?m:newTc.normal.minPack
+            });
+          });
+          saveTc(newTc);
+          setEditNormal({threshold:newTc.normal.threshold,minPack:newTc.normal.minPack});
+          setEditSpecial([]);
+          showToast("阈值已保存");
+        };
+        const deleteSpecialGroup=(groupIndex)=>{
+          const newTc=JSON.parse(JSON.stringify(tc));
+          newTc.special.splice(groupIndex,1);
+          saveTc(newTc);showToast("已删除");
+        };
+
+        const packSelect=(val,onChange)=>(
+          <select value={val} onChange={e=>onChange(parseInt(e.target.value,10))}
+            style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"6px 10px",color:"#fff",fontSize:12,outline:"none"}}>
+            {PACK_SIZES.map(p=><option key={p} value={p}>{p}</option>)}
+          </select>
+        );
+
         return (
           <div style={{padding:"16px 20px 100px"}}>
+            {/* Settings toggle */}
+            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+              <button onClick={showSettings?()=>setShowSettings(false):openSettings}
+                style={{...S.btn(),padding:"6px 14px",fontSize:12}}>{showSettings?"关闭设置":"阈值设置"}</button>
+            </div>
+
+            {/* Settings Panel */}
+            {showSettings&&(
+              <>
+              <div style={S.panel}>
+                <SectionTitle>当前阈值</SectionTitle>
+                <div style={{padding:"10px 14px",background:"rgba(255,255,255,0.03)",borderRadius:10,fontSize:12,lineHeight:2,color:"#999"}}>
+                  <div><span style={{color:"#7bed9f"}}>普通</span> ｜库存报警 {tc.normal.threshold} ｜补货规格起步 {tc.normal.minPack}</div>
+                  {tc.special.map((g,i)=>(
+                    <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span><span style={{color:"#ffa502"}}>特殊</span> ｜库存报警 {g.threshold} ｜补货规格起步 {g.minPack} ｜<span style={{color:"#ccc"}}>{g.ids.join(" ")}</span></span>
+                      <button onClick={()=>deleteSpecialGroup(i)}
+                        style={{background:"none",border:"none",color:"#ff4757",fontSize:12,cursor:"pointer",padding:"0 4px",flexShrink:0}}>删除</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={S.panel}>
+                <SectionTitle>自定义阈值</SectionTitle>
+                <div style={{fontSize:12,color:"#888",marginBottom:6}}>常规组</div>
+                <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+                  <span style={{fontSize:11,color:"#666"}}>库存报警</span>
+                  <input type="number" value={editNormal?.threshold||""} onChange={e=>setEditNormal({...editNormal,threshold:e.target.value})}
+                    style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"6px 10px",color:"#fff",fontSize:12,width:70,outline:"none"}} />
+                  <span style={{fontSize:11,color:"#666"}}>补货规格起步</span>
+                  {packSelect(editNormal?.minPack||500,v=>setEditNormal({...editNormal,minPack:v}))}
+                </div>
+                {editSpecial&&editSpecial.map((g,i)=>(
+                  <div key={i} style={{marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                      <span style={{fontSize:12,color:"#888"}}>新增特殊组 {i+1}</span>
+                      <button onClick={()=>setEditSpecial(editSpecial.filter((_,j)=>j!==i))}
+                        style={{background:"none",border:"none",color:"#ff4757",fontSize:14,padding:"0 4px",cursor:"pointer"}}>删除</button>
+                    </div>
+                    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                      <input type="text" placeholder="色号 空格分隔" value={g.ids}
+                        onChange={e=>{const n=[...editSpecial];n[i]={...n[i],ids:e.target.value};setEditSpecial(n);}}
+                        style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"6px 10px",color:"#fff",fontSize:12,flex:1,minWidth:120,outline:"none"}} />
+                      <span style={{fontSize:11,color:"#666"}}>库存报警</span>
+                      <input type="number" value={g.threshold}
+                        onChange={e=>{const n=[...editSpecial];n[i]={...n[i],threshold:e.target.value};setEditSpecial(n);}}
+                        style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"6px 10px",color:"#fff",fontSize:12,width:70,outline:"none"}} />
+                      <span style={{fontSize:11,color:"#666"}}>补货规格起步</span>
+                      {packSelect(g.minPack,v=>{const n=[...editSpecial];n[i]={...n[i],minPack:v};setEditSpecial(n);})}
+                    </div>
+                  </div>
+                ))}
+                <button onClick={()=>setEditSpecial([...(editSpecial||[]),{ids:"",threshold:200,minPack:500}])}
+                  style={{width:"100%",padding:8,borderRadius:10,border:"1px dashed rgba(255,255,255,0.12)",background:"transparent",color:"#555",fontSize:16,cursor:"pointer",marginBottom:12}}>+ 添加特殊组</button>
+                <button onClick={saveSettings} style={S.btn("green")}>保存阈值</button>
+              </div>
+              </>
+            )}
+
+            {!showSettings&&(<>
             <div style={S.panel}>
               <SectionTitle>新作品用量（可选）</SectionTitle>
               <div style={S.hint}>每行格式：色号 数量<br/>例：A1 200</div>
@@ -461,6 +598,7 @@ function App() {
                 </div>
               </>
             )}
+            </>)}
           </div>
         );
       })()}
