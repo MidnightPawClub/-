@@ -183,15 +183,19 @@ function tcMergedDisplay(tc) {
 }
 // Normalize: remove special groups identical to normal, dedupe ids (last wins)
 function tcNormalize(tc) {
-  // Last-wins: iterate all special groups, later overrides earlier for same id
   const idMap=new Map();
   tc.special.forEach((g,gi)=>g.ids.forEach(id=>idMap.set(id,gi)));
-  // Rebuild special groups with deduped ids
   let rebuilt=tc.special.map((g,gi)=>({...g,ids:g.ids.filter(id=>idMap.get(id)===gi)}));
-  // Remove groups identical to normal
   rebuilt=rebuilt.filter(g=>!(g.threshold===tc.normal.threshold&&g.minPack===tc.normal.minPack));
-  // Remove empty groups
   rebuilt=rebuilt.filter(g=>g.ids.length>0);
+  // Merge groups with identical threshold+minPack
+  const mergeMap=new Map();
+  rebuilt.forEach(g=>{
+    const key=`${g.threshold}-${g.minPack}`;
+    if(mergeMap.has(key)) mergeMap.get(key).ids.push(...g.ids);
+    else mergeMap.set(key,{threshold:g.threshold,minPack:g.minPack,ids:[...g.ids]});
+  });
+  rebuilt=Array.from(mergeMap.values());
   return {...tc,special:rebuilt};
 }
 
