@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude 聊天记录查看器</title>
+<style>
+:root {
+  --bg: #faf7ff;
+  --card: #ffffff;
+  --text: #2b2b2b;
+  --muted: #7d7d7d;
+  --brand: #8b5cf6;
+  --accent: #22d3ee;
+  --accent-2: #f472b6;
+  --accent-3: #34d399;
+  --bubble-user: linear-gradient(135deg, #ffd1dc, #ffe4f3, #e3f7ff);
+  --thinking-bg: #f5f0ff;
+  --thinking-border: #d8ccf0;
+  --shadow: 0 10px 25px rgba(0,0,0,.07);
+  --radius: 16px;
+  --sidebar-w: 300px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body, html { height: 100%; overflow-x: hidden; }
+body {
+  background: radial-gradient(1000px 600px at 10% -10%, #fff7fb, transparent),
+              radial-gradient(900px 700px at 120% -20%, #f0fbff, transparent),
+              var(--bg);
+  color: var(--text);
+  font: 15px/1.6 ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC",
+        "Noto Sans CJK SC", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.app {
+  display: grid;
+  grid-template-columns: 1fr;
+  height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Header ── */
+header {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(90deg,
+    rgba(139,92,246,.08),
+    rgba(34,211,238,.08) 60%,
+    rgba(244,114,182,.08));
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(0,0,0,.06);
+}
+.toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 9px;
+  border: 1px solid rgba(0,0,0,.08); background: #fff;
+  cursor: pointer; transition: all .2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,.1);
+}
+.toggle:hover { background: #f8f9fa; border-color: rgba(0,0,0,.15); }
+.toggle:active { transform: scale(.95); }
+.toggle .hamburger { display: flex; flex-direction: column; gap: 3px; width: 16px; }
+.toggle .hamburger span {
+  width: 100%; height: 2px; background: var(--text);
+  border-radius: 1px; transition: all .3s ease;
+}
+.brand { font-weight: 700; letter-spacing: .3px; }
+
+/* ── Sidebar ── */
+.sidebar {
+  background: linear-gradient(160deg, #fff, #fff6fb 30%, #f4fbff 80%);
+  border-right: 1px solid rgba(0,0,0,.06);
+  overflow: auto;
+  position: fixed; left: 0; top: 0; bottom: 0;
+  width: 76vw; max-width: 340px;
+  transform: translateX(-102%); transition: transform .25s ease;
+  z-index: 20; box-shadow: 8px 0 24px rgba(0,0,0,.12);
+}
+.sidebar.open { transform: translateX(0); }
+.side-inner { padding: 14px; }
+.picker {
+  display: grid; gap: 10px; margin-bottom: 12px;
+  background: var(--card); padding: 12px;
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.picker label { font-size: 12px; color: var(--muted); }
+.picker .btn {
+  display: flex; gap: 8px; align-items: center; justify-content: center;
+  padding: 10px 12px; border-radius: 12px;
+  border: 1px dashed rgba(0,0,0,.12);
+  background: linear-gradient(135deg, #fff, #f9fbff);
+  cursor: pointer; transition: all .2s ease;
+}
+.picker .btn:hover { border-color: rgba(0,0,0,.2); }
+.picker input { display: none; }
+
+/* ── Mode Tabs ── */
+.mode-tabs {
+  display: flex; gap: 4px; margin: 10px 0;
+  background: rgba(139,92,246,.06); border-radius: 10px; padding: 3px;
+}
+.mode-tab {
+  flex: 1; padding: 6px 0; border: none; border-radius: 8px;
+  background: transparent; color: var(--muted);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all .2s ease;
+}
+.mode-tab.active {
+  background: #fff; color: var(--brand);
+  box-shadow: 0 2px 8px rgba(139,92,246,.12);
+}
+.mode-tab:hover:not(.active) { color: var(--text); }
+
+/* ── Search ── */
+.search { position: relative; margin: 10px 0; }
+.search input {
+  width: 100%; padding: 10px 12px 10px 36px; padding-right: 40px;
+  border-radius: 12px; border: 1px solid rgba(0,0,0,.12); background: #fff;
+  font-size: 14px; outline: none;
+}
+.search input:focus { border-color: rgba(139,92,246,.3); }
+.search .i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: .45; }
+.clear-btn {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 24px; border: none; background: 0 0;
+  cursor: pointer; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); transition: all .2s ease;
+}
+.clear-btn:hover { background: rgba(0,0,0,.08); color: var(--text); }
+
+/* ── Search Results ── */
+.results { margin-top: 8px; display: none; }
+.results.show { display: block; }
+.result {
+  padding: 12px; margin: 8px 0; border-radius: 12px;
+  background: linear-gradient(135deg, #fff, #f7fbff);
+  border: 1px solid rgba(0,0,0,.06);
+  cursor: pointer; transition: all .2s ease;
+}
+.result:hover {
+  background: linear-gradient(135deg, #f8f9ff, #f0f4ff);
+  border-color: rgba(139,92,246,.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
+}
+.result .meta {
+  font-size: 12px; color: var(--muted);
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 6px;
+}
+.result .conv-title { font-weight: 600; color: var(--brand); font-size: 13px; }
+.result .snippet { font-size: 14px; line-height: 1.4; }
+
+/* ── Conversation List ── */
+.convs { display: flex; flex-direction: column; gap: 6px; }
+.conv {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 10px; border-radius: 12px; background: #fff;
+  border: 1px solid rgba(0,0,0,.06); cursor: pointer;
+  transition: all .2s ease;
+}
+.conv:hover { border-color: rgba(0,0,0,.15); }
+.conv.active { outline: 2px solid rgba(139,92,246,.25); }
+.conv .name { font-weight: 600; font-size: 14px; line-height: 1.3; width: 100%; }
+.conv .time { color: var(--muted); font-size: 12px; }
+
+/* ── Timeline ── */
+#timelinePanel { display: none; }
+.tl-picker {
+  background: var(--card); border-radius: var(--radius);
+  padding: 12px; box-shadow: var(--shadow);
+}
+.tl-picker-row {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+  font-size: 14px; color: var(--text);
+}
+.tl-select {
+  padding: 6px 8px; border-radius: 8px;
+  border: 1px solid rgba(0,0,0,.12); background: #fff;
+  font-size: 14px; color: var(--text); outline: none;
+  cursor: pointer; min-width: 0;
+}
+.tl-select:focus { border-color: rgba(139,92,246,.4); }
+.tl-go-btn {
+  width: 100%; padding: 8px 0; border: none; border-radius: 10px;
+  background: linear-gradient(135deg, var(--brand), #7c3aed);
+  color: #fff; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all .2s ease;
+}
+.tl-go-btn:hover { opacity: .9; transform: translateY(-1px); }
+.tl-go-btn:active { transform: scale(.98); }
+.tl-go-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+/* timeline results in main area */
+.tl-result-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(139,92,246,.06), rgba(34,211,238,.06));
+  border-radius: 12px; border: 1px solid rgba(139,92,246,.1);
+}
+.tl-result-date { font-weight: 700; color: var(--brand); font-size: 15px; }
+.tl-result-stat { font-size: 12px; color: var(--muted); }
+.tl-result-back {
+  padding: 4px 12px; border: 1px solid rgba(139,92,246,.2);
+  border-radius: 8px; background: #fff; color: var(--brand);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: all .2s ease;
+}
+.tl-result-back:hover { background: rgba(139,92,246,.06); }
+.tl-msg-card {
+  margin: 10px 0; padding: 12px; border-radius: 12px;
+  background: #fff; border: 1px solid rgba(0,0,0,.06);
+  box-shadow: var(--shadow); cursor: pointer;
+  transition: all .2s ease;
+}
+.tl-msg-card:hover {
+  border-color: rgba(139,92,246,.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0,0,0,.1);
+}
+.tl-msg-meta {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 6px; font-size: 12px;
+  overflow: hidden; flex-wrap: nowrap;
+}
+.tl-msg-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.tl-msg-dot.human { background: var(--accent-2); }
+.tl-msg-dot.assistant { background: var(--brand); }
+.tl-msg-role { font-weight: 600; color: var(--muted); flex-shrink: 0; white-space: nowrap; }
+.tl-msg-time { color: var(--muted); flex-shrink: 0; white-space: nowrap; }
+.tl-msg-conv {
+  font-size: 11px; color: var(--brand); background: rgba(139,92,246,.08);
+  padding: 1px 8px; border-radius: 6px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1;
+}
+.tl-msg-snippet {
+  font-size: 13px; line-height: 1.5; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Main ── */
+.main { display: flex; flex-direction: column; height: 100vh; min-width: 0; width: 100%; }
+.chat-container {
+  display: flex; flex-direction: column; height: 100%;
+  min-width: 0; width: 100%; overflow: auto;
+}
+.chat {
+  flex: 1 1 auto; padding: 16px;
+  max-width: min(100%, 1000px); margin: 0 auto; min-width: 0;
+}
+.empty { color: var(--muted); text-align: center; padding: 40px; }
+
+/* ── Messages ── */
+.msg { margin: 16px 0; }
+.timestamp { font-size: 12px; color: var(--muted); margin: 6px 4px; }
+.role { display: flex; gap: 10px; align-items: flex-start; width: 100%; min-width: 0; }
+.role > * { min-width: 0; max-width: 100%; }
+.bubble {
+  max-width: 100%; padding: 12px 14px; border-radius: 18px;
+  box-shadow: var(--shadow); background: var(--bubble-user);
+  border: 1px solid rgba(0,0,0,.06);
+}
+.assistant-wrapper { width: 100%; padding: 0; }
+.assistant-wrapper .md {
+  background: #fff; border: 1px solid rgba(0,0,0,.06);
+  border-radius: 14px; padding: 12px;
+  box-shadow: var(--shadow); position: relative;
+}
+.role.user { justify-content: flex-end; }
+.role.user .bubble { max-width: 61.8%; margin-left: auto; }
+.msg.user .timestamp { text-align: right; }
+
+/* ── Thinking Block ── */
+.thinking-block {
+  margin: 0 0 8px; border-radius: 10px;
+  border: 1px solid var(--thinking-border);
+  background: var(--thinking-bg); overflow: hidden;
+}
+.thinking-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; cursor: pointer;
+  font-size: 13px; color: var(--brand); font-weight: 500;
+  user-select: none; transition: background .2s ease;
+}
+.thinking-toggle:hover { background: rgba(139,92,246,.06); }
+.thinking-arrow {
+  display: inline-block; transition: transform .2s ease;
+  font-size: 11px;
+}
+.thinking-block.open .thinking-arrow { transform: rotate(90deg); }
+.thinking-content {
+  display: none; padding: 0 12px 10px;
+  font-size: 13px; line-height: 1.5; color: #666;
+  border-top: 1px solid var(--thinking-border);
+  max-height: 400px; overflow-y: auto;
+}
+.thinking-block.open .thinking-content { display: block; }
+
+/* ── File Attachment ── */
+.file-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; margin: 4px 2px; border-radius: 8px;
+  background: rgba(139,92,246,.06); border: 1px solid rgba(139,92,246,.12);
+  font-size: 12px; color: var(--brand);
+}
+
+/* ── Markdown ── */
+.md { white-space: normal; word-wrap: break-word; overflow-wrap: break-word; }
+.md h1, .md h2, .md h3 { line-height: 1.25; margin: 16px 0 8px; }
+.md h1 { font-size: 1.4rem; font-weight: 700; }
+.md h2 { font-size: 1.25rem; font-weight: 600; }
+.md h3 { font-size: 1.12rem; font-weight: 600; }
+.md pre {
+  background: #4f3356c9; color: #f5f7ff;
+  padding: 14px; border-radius: 12px;
+  overflow-x: auto; border: 1px solid rgba(255,255,255,.08);
+  margin: 12px 0; word-break: break-all;
+}
+.md code {
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: #f7f7fb; border: 1px solid rgba(0,0,0,.08);
+  padding: .15em .35em; border-radius: 6px; font-size: .9em;
+  word-break: break-all;
+}
+.md pre code {
+  background: 0 0; border: none; color: inherit; padding: 0; font-size: .9em;
+}
+.md ol, .md ul { padding-left: 1.2rem; margin: 0; }
+.md li { margin: 4px 0; }
+.md blockquote {
+  border-left: 4px solid #e3d7ff; margin: 0; padding: 0 10px;
+}
+.md hr {
+  border: none; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(139,92,246,.4), rgba(34,211,238,.4), transparent);
+  margin: 24px 0; border-radius: 1px;
+}
+.md p { margin: 12px 0; white-space: pre-wrap; }
+.markdown-table {
+  width: 100%; border-collapse: collapse; margin: 12px 0;
+  border-radius: 8px; overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08); table-layout: auto;
+}
+.markdown-table th {
+  background: linear-gradient(135deg, #f8f9ff, #f0f4ff);
+  padding: 10px 12px; text-align: left; font-weight: 600;
+  border-bottom: 2px solid #e3d7ff; color: var(--text);
+}
+.markdown-table td {
+  padding: 8px 12px; border-bottom: 1px solid rgba(0,0,0,.06); background: #fff;
+}
+.markdown-table tr:hover td { background: #f8f9fa; }
+.markdown-table tr:last-child td { border-bottom: none; }
+
+.highlight { animation: flash 1.5s ease; }
+@keyframes flash { 0% { background: rgba(255,240,255,.9); } 100% { background: transparent; } }
+
+/* ── Footer ── */
+.footer {
+  padding: 6px 14px; font-size: 12px; color: var(--muted); text-align: center;
+}
+.backdrop {
+  position: fixed; inset: 0;
+  background: rgba(16,12,24,.32); backdrop-filter: blur(2px);
+  opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 15;
+}
+.backdrop.show { opacity: 1; pointer-events: auto; }
+
+/* ── Desktop: side-by-side layout ── */
+@media (min-width: 1200px) {
+  .app { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
+  .sidebar {
+    position: static; width: auto; max-width: none;
+    transform: none; transition: none;
+    box-shadow: none;
+  }
+  .toggle { display: none; }
+  .backdrop { display: none; }
+}
+/* ── Small mobile ── */
+@media (max-width: 480px) {
+  .chat { padding: 8px; }
+  .bubble { max-width: 90%; padding: 8px 10px; }
+  .assistant-wrapper .md { padding: 8px; }
+  .role.user .bubble { max-width: 80%; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="side-inner">
+      <div class="picker">
+        <label>选择 Claude 导出的 JSON 文件</label>
+        <label class="btn">
+          <input id="pickFile" type="file" accept="application/json">
+          🧾 导入 conversations.json
+        </label>
+      </div>
+
+      <div class="mode-tabs">
+        <button class="mode-tab active" data-mode="convs">💬 窗口列表</button>
+        <button class="mode-tab" data-mode="timeline">🕐 时间轴</button>
+      </div>
+
+      <div class="search" id="searchWrap">
+        <span class="i">🔎</span>
+        <input id="searchBox" placeholder="在所有窗口中搜索… 回车确认">
+        <button id="clearSearch" class="clear-btn" style="display:none">✕</button>
+      </div>
+      <div id="searchResults" class="results"></div>
+
+      <div id="convPanel">
+        <h4 style="margin:10px 2px">窗口列表</h4>
+        <div id="convList" class="convs"></div>
+      </div>
+
+      <div id="timelinePanel">
+        <div class="tl-picker">
+          <div class="tl-picker-row">
+            <select class="tl-select" id="tlYear" disabled><option>年</option></select>
+            <span>年</span>
+            <select class="tl-select" id="tlMonth" disabled><option>月</option></select>
+            <span>月</span>
+            <select class="tl-select" id="tlDay" disabled><option>日</option></select>
+            <span>日</span>
+          </div>
+          <button class="tl-go-btn" id="tlGoBtn" disabled>查看当日记录</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="backdrop" id="backdrop"></div>
+
+  <main class="main">
+    <header>
+      <button class="toggle" id="toggleBtn">
+        <div class="hamburger"><span></span><span></span><span></span></div>
+      </button>
+      <div class="brand" id="brandTitle">Claude 聊天记录查看器</div>
+    </header>
+    <div class="chat-container">
+      <section id="chat" class="chat">
+        <div class="empty">请导入 Claude 导出的 conversations.json 文件。</div>
+      </section>
+    </div>
+    <div class="footer">本地浏览器解析渲染，不上传任何数据。</div>
+  </main>
+</div>
+
+<script>
+!function() {
+  const $ = s => document.querySelector(s);
+  const convListEl = $('#convList');
+  const chatEl = $('#chat');
+  const chatContainer = $('.chat-container');
+  const searchBox = $('#searchBox');
+  const searchResults = $('#searchResults');
+  const clearBtn = $('#clearSearch');
+  const sidebar = $('#sidebar');
+  const backdrop = $('#backdrop');
+  const convPanel = $('#convPanel');
+  const timelinePanel = $('#timelinePanel');
+
+  let conversations = [];
+  let allMessages = [];
+  let activeConvId = null;
+
+  // ── Sidebar Toggle ──
+  function toggleSidebar(open) {
+    sidebar.classList.toggle('open', open);
+    backdrop.classList.toggle('show', open);
+    document.body.style.overflow = open ? 'hidden' : '';
+  }
+  $('#toggleBtn').addEventListener('click', () => toggleSidebar(!sidebar.classList.contains('open')));
+  backdrop.addEventListener('click', () => toggleSidebar(false));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (searchResults.classList.contains('show')) {
+        searchResults.classList.remove('show');
+        clearBtn.style.display = 'none';
+      } else {
+        toggleSidebar(false);
+      }
+    }
+  });
+
+  // ── Mode Tabs ──
+  document.querySelectorAll('.mode-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const mode = tab.dataset.mode;
+      if (mode === 'convs') {
+        convPanel.style.display = 'block';
+        timelinePanel.style.display = 'none';
+        document.getElementById('searchWrap').style.display = '';
+        searchResults.style.display = '';
+      } else {
+        convPanel.style.display = 'none';
+        timelinePanel.style.display = 'block';
+        document.getElementById('searchWrap').style.display = 'none';
+        searchResults.style.display = 'none';
+        renderTimeline();
+      }
+    });
+  });
+  timelinePanel.style.display = 'none';
+
+  // ── File Import ──
+  $('#pickFile').addEventListener('change', async e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      parseJSON(await file.text());
+    } catch (err) {
+      alert('文件读取失败: ' + err.message);
+    }
+  });
+
+  function parseJSON(text) {
+    let data;
+    try { data = JSON.parse(text); }
+    catch (e) { alert('JSON 解析失败: ' + e.message); return; }
+    if (!Array.isArray(data)) data = [data];
+
+    conversations = data.map((conv, idx) => {
+      const msgs = (conv.chat_messages || []).map((m, mi) => {
+        const textParts = [];
+        const thinkingParts = [];
+        const files = (m.files || []).map(f => f.file_name || f.name || '未知文件');
+
+        if (Array.isArray(m.content)) {
+          for (const block of m.content) {
+            if (block.type === 'text' && block.text) textParts.push(block.text);
+            else if (block.type === 'thinking' && block.thinking) thinkingParts.push(block.thinking);
+          }
+        } else if (typeof m.text === 'string') {
+          textParts.push(m.text);
+        }
+
+        return {
+          id: 'msg-' + idx + '-' + mi,
+          sender: m.sender || 'unknown',
+          text: textParts.join('\n'),
+          thinking: thinkingParts,
+          files: files,
+          time: m.created_at ? new Date(m.created_at).getTime() / 1000 : 0,
+          model: m.model || ''
+        };
+      });
+
+      return {
+        id: 'c' + idx,
+        title: conv.name || ('\u672A\u547D\u540D\u4F1A\u8BDD ' + (idx + 1)),
+        uuid: conv.uuid || '',
+        createTime: conv.created_at ? new Date(conv.created_at).getTime() / 1000 : 0,
+        messages: msgs
+      };
+    });
+
+    conversations.sort((a, b) => (b.createTime || 0) - (a.createTime || 0));
+
+    allMessages = [];
+    conversations.forEach(conv => {
+      conv.messages.forEach(msg => {
+        if ((msg.sender === 'human' || msg.sender === 'assistant') && (msg.text || msg.files.length)) {
+          allMessages.push({
+            convId: conv.id, convTitle: conv.title,
+            id: msg.id, sender: msg.sender, text: msg.text, time: msg.time,
+            model: msg.model || ''
+          });
+        }
+      });
+    });
+
+    renderConvList();
+    tlInited = false; // reset timeline cache
+    if (conversations.length) selectConv(conversations[0].id, false, true);
+  }
+
+  // ── Render Conversation List ──
+  function renderConvList() {
+    convListEl.innerHTML = '';
+    conversations.forEach(conv => {
+      const el = document.createElement('div');
+      el.className = 'conv';
+      el.dataset.id = conv.id;
+      const d = new Date((conv.createTime || 0) * 1000);
+      el.innerHTML = '<div class="name">' + esc(conv.title) + '</div><div class="time">' + fmtDate(d) + '</div>';
+      el.addEventListener('click', () => selectConv(conv.id, true, true));
+      convListEl.appendChild(el);
+    });
+  }
+
+  // ── Select Conversation ──
+  function selectConv(id, closeSidebar, scrollTop) {
+    activeConvId = id;
+    convListEl.querySelectorAll('.conv').forEach(el => {
+      el.classList.toggle('active', el.dataset.id === id);
+    });
+    const conv = conversations.find(c => c.id === id);
+    $('#brandTitle').textContent = conv ? 'Claude \u00B7 ' + conv.title : 'Claude \u804A\u5929\u8BB0\u5F55\u67E5\u770B\u5668';
+    if (conv) renderChat(conv);
+    if (closeSidebar) toggleSidebar(false);
+    if (scrollTop) chatContainer.scrollTop = 0;
+  }
+
+  // ── Render Chat ──
+  function renderChat(conv) {
+    chatEl.innerHTML = '';
+    const msgs = conv.messages.filter(m =>
+      (m.sender === 'human' || m.sender === 'assistant') &&
+      (m.text || m.thinking.length || m.files.length)
+    );
+
+    if (!msgs.length) {
+      chatEl.innerHTML = '<div class="empty">\u8FD9\u4E2A\u4F1A\u8BDD\u91CC\u6CA1\u6709\u53EF\u663E\u793A\u7684\u6D88\u606F\u3002</div>';
+      return;
+    }
+
+    msgs.forEach((msg, i) => {
+      const article = document.createElement('article');
+      article.className = 'msg ' + (msg.sender === 'human' ? 'user' : 'assistant');
+      article.id = msg.id;
+
+      const roleDiv = document.createElement('div');
+      roleDiv.className = 'role ' + (msg.sender === 'human' ? 'user' : 'assistant');
+
+      if (msg.sender === 'human') {
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+
+        if (msg.files.length) {
+          const fd = document.createElement('div');
+          fd.style.marginBottom = '6px';
+          msg.files.forEach(f => {
+            const tag = document.createElement('span');
+            tag.className = 'file-tag';
+            tag.textContent = '\uD83D\uDCCE ' + f;
+            fd.appendChild(tag);
+          });
+          bubble.appendChild(fd);
+        }
+
+        if (msg.text) {
+          const md = document.createElement('div');
+          md.className = 'md';
+          md.innerHTML = renderMD(msg.text);
+          bubble.appendChild(md);
+        }
+
+        const ts = document.createElement('div');
+        ts.className = 'timestamp';
+        ts.textContent = msg.time ? fmtDate(new Date(msg.time * 1000), true) : '\u65F6\u95F4\u672A\u77E5';
+        bubble.appendChild(ts);
+        roleDiv.appendChild(bubble);
+      } else {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'assistant-wrapper';
+
+        if (msg.thinking.length) {
+          msg.thinking.forEach(th => {
+            const block = document.createElement('div');
+            block.className = 'thinking-block';
+            const toggle = document.createElement('div');
+            toggle.className = 'thinking-toggle';
+            toggle.innerHTML = '<span class="thinking-arrow">\u25B6</span> \uD83D\uDCAD \u601D\u8003\u8FC7\u7A0B';
+            toggle.addEventListener('click', () => block.classList.toggle('open'));
+            const content = document.createElement('div');
+            content.className = 'thinking-content';
+            content.innerHTML = renderMD(th);
+            block.appendChild(toggle);
+            block.appendChild(content);
+            wrapper.appendChild(block);
+          });
+        }
+
+        if (msg.text) {
+          const md = document.createElement('div');
+          md.className = 'md';
+          md.innerHTML = renderMD(msg.text);
+          wrapper.appendChild(md);
+        }
+
+        if (msg.files.length) {
+          const fd = document.createElement('div');
+          fd.style.margin = '8px 0';
+          msg.files.forEach(f => {
+            const tag = document.createElement('span');
+            tag.className = 'file-tag';
+            tag.textContent = '\uD83D\uDCCE ' + f;
+            fd.appendChild(tag);
+          });
+          wrapper.appendChild(fd);
+        }
+
+        const ts = document.createElement('div');
+        ts.className = 'timestamp';
+        var tsText = msg.time ? fmtDate(new Date(msg.time * 1000), true) : '\u65F6\u95F4\u672A\u77E5';
+        ts.textContent = tsText;
+        wrapper.appendChild(ts);
+        roleDiv.appendChild(wrapper);
+      }
+
+      article.appendChild(roleDiv);
+      chatEl.appendChild(article);
+    });
+  }
+
+  // ── Timeline ──
+  let tlByDate = {}; // 'YYYY-MM-DD' -> messages
+  let tlYears = [], tlMonthsByYear = {}, tlDaysByYM = {};
+  let tlInited = false;
+  let tlViewingDate = null; // currently viewing timeline date
+
+  function buildTimelineIndex() {
+    tlByDate = {};
+    allMessages.forEach(msg => {
+      var d = msg.time ? new Date(msg.time * 1000) : null;
+      if (!d) return;
+      var key = fmtDate(d);
+      if (!tlByDate[key]) tlByDate[key] = [];
+      tlByDate[key].push(msg);
+    });
+    Object.keys(tlByDate).forEach(k => {
+      tlByDate[k].sort((a, b) => (a.time || 0) - (b.time || 0));
+    });
+
+    // build year -> months -> days index
+    tlYears = []; tlMonthsByYear = {}; tlDaysByYM = {};
+    var allDates = Object.keys(tlByDate).sort().reverse();
+    allDates.forEach(d => {
+      var parts = d.split('-');
+      var y = parts[0], m = parts[1], day = parts[2];
+      var ym = y + '-' + m;
+      if (!tlMonthsByYear[y]) { tlMonthsByYear[y] = []; tlYears.push(y); }
+      if (tlMonthsByYear[y].indexOf(m) < 0) tlMonthsByYear[y].push(m);
+      if (!tlDaysByYM[ym]) tlDaysByYM[ym] = [];
+      if (tlDaysByYM[ym].indexOf(day) < 0) tlDaysByYM[ym].push(day);
+    });
+    // sort months and days
+    Object.keys(tlMonthsByYear).forEach(y => tlMonthsByYear[y].sort());
+    Object.keys(tlDaysByYM).forEach(ym => tlDaysByYM[ym].sort());
+    tlInited = true;
+  }
+
+  var yearSel = document.getElementById('tlYear');
+  var monthSel = document.getElementById('tlMonth');
+  var daySel = document.getElementById('tlDay');
+  var goBtn = document.getElementById('tlGoBtn');
+
+  function renderTimeline() {
+    if (!allMessages.length) return;
+    if (!tlInited) buildTimelineIndex();
+    if (!tlYears.length) return;
+
+    // populate year
+    yearSel.innerHTML = '<option value="">\u2014</option>';
+    tlYears.forEach(y => {
+      var opt = document.createElement('option');
+      opt.value = y; opt.textContent = y;
+      yearSel.appendChild(opt);
+    });
+    yearSel.disabled = false;
+    monthSel.innerHTML = '<option value="">\u2014</option>';
+    monthSel.disabled = true;
+    daySel.innerHTML = '<option value="">\u2014</option>';
+    daySel.disabled = true;
+    goBtn.disabled = true;
+  }
+
+  yearSel.addEventListener('change', function() {
+    var y = yearSel.value;
+    monthSel.innerHTML = '<option value="">\u2014</option>';
+    daySel.innerHTML = '<option value="">\u2014</option>';
+    daySel.disabled = true;
+    goBtn.disabled = true;
+    if (!y || !tlMonthsByYear[y]) { monthSel.disabled = true; return; }
+    tlMonthsByYear[y].forEach(m => {
+      var opt = document.createElement('option');
+      opt.value = m; opt.textContent = parseInt(m);
+      monthSel.appendChild(opt);
+    });
+    monthSel.disabled = false;
+  });
+
+  monthSel.addEventListener('change', function() {
+    var y = yearSel.value, m = monthSel.value;
+    var ym = y + '-' + m;
+    daySel.innerHTML = '<option value="">\u2014</option>';
+    goBtn.disabled = true;
+    if (!ym || !tlDaysByYM[ym]) { daySel.disabled = true; return; }
+    tlDaysByYM[ym].forEach(d => {
+      var opt = document.createElement('option');
+      opt.value = d; opt.textContent = parseInt(d);
+      daySel.appendChild(opt);
+    });
+    daySel.disabled = false;
+  });
+
+  daySel.addEventListener('change', function() {
+    goBtn.disabled = !daySel.value;
+  });
+
+  goBtn.addEventListener('click', function() {
+    var dateKey = yearSel.value + '-' + monthSel.value + '-' + daySel.value;
+    var dayMsgs = tlByDate[dateKey];
+    if (!dayMsgs || !dayMsgs.length) return;
+    showTimelineDay(dateKey, dayMsgs);
+    toggleSidebar(false);
+  });
+
+  function showTimelineDay(dateKey, msgs) {
+    tlViewingDate = dateKey;
+    activeConvId = null;
+    convListEl.querySelectorAll('.conv').forEach(el => el.classList.remove('active'));
+    $('#brandTitle').textContent = 'Claude \u00B7 \u65F6\u95F4\u8F74 \u00B7 ' + dateKey;
+
+    chatEl.innerHTML = '';
+
+    // header bar
+    var header = document.createElement('div');
+    header.className = 'tl-result-header';
+    header.innerHTML =
+      '<div><span class="tl-result-date">' + dateKey + '</span> ' +
+      '<span class="tl-result-stat">\u5171 ' + msgs.length + ' \u6761\u6D88\u606F</span></div>';
+    chatEl.appendChild(header);
+
+    // message cards
+    msgs.forEach(function(msg) {
+      var card = document.createElement('div');
+      card.className = 'tl-msg-card';
+      card.addEventListener('click', function() {
+        // switch to conv mode
+        document.querySelectorAll('.mode-tab').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelector('.mode-tab[data-mode="convs"]').classList.add('active');
+        convPanel.style.display = 'block';
+        timelinePanel.style.display = 'none';
+        document.getElementById('searchWrap').style.display = '';
+        tlViewingDate = null;
+        selectConv(msg.convId, false, false);
+        setTimeout(function() {
+          var el = document.getElementById(msg.id);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            el.classList.add('highlight');
+            setTimeout(function() { el.classList.remove('highlight'); }, 1600);
+          }
+        }, 150);
+      });
+
+      var snippet = msg.text.length > 100 ? msg.text.slice(0, 100) + '\u2026' : msg.text;
+      var d = msg.time ? new Date(msg.time * 1000) : null;
+      var timeStr = d ? fmtDate(d, true).split(' ')[1] : '';
+
+      card.innerHTML =
+        '<div class="tl-msg-meta">' +
+          '<span class="tl-msg-dot ' + msg.sender + '"></span>' +
+          '<span class="tl-msg-role">' + (msg.sender === 'human' ? '\uD83D\uDC64 \u6211' : '\uD83E\uDD16 Claude') + '</span>' +
+          '<span class="tl-msg-conv" title="' + esc(msg.convTitle) + '">' + esc(msg.convTitle) + '</span>' +
+          '<span class="tl-msg-time">' + timeStr + '</span>' +
+        '</div>' +
+        '<div class="tl-msg-snippet">' + esc(snippet) + '</div>';
+
+      chatEl.appendChild(card);
+    });
+
+    chatContainer.scrollTop = 0;
+  }
+
+  // ── Search ──
+  searchBox.addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch(searchBox.value.trim());
+  });
+  clearBtn.addEventListener('click', () => {
+    searchBox.value = '';
+    searchResults.classList.remove('show');
+    clearBtn.style.display = 'none';
+  });
+  searchBox.addEventListener('input', () => {
+    clearBtn.style.display = searchBox.value ? 'flex' : 'none';
+  });
+
+  function doSearch(query) {
+    if (!allMessages.length || !query) {
+      searchResults.classList.remove('show');
+      return;
+    }
+    const re = new RegExp(escRe(query), 'i');
+    const hits = [];
+    for (const msg of allMessages) {
+      const m = msg.text.match(re);
+      if (m) {
+        hits.push({
+          convId: msg.convId, convTitle: msg.convTitle,
+          id: msg.id, time: msg.time,
+          snippet: msg.text.slice(Math.max(0, m.index - 60), Math.min(msg.text.length, m.index + 60)) + '\u2026'
+        });
+      }
+    }
+
+    if (!hits.length) {
+      searchResults.classList.add('show');
+      searchResults.innerHTML = '<div class="result">\u672A\u627E\u5230\u7ED3\u679C</div>';
+      clearBtn.style.display = 'flex';
+      return;
+    }
+
+    const best = new Map();
+    hits.forEach(h => {
+      if (!best.has(h.convId) || h.time > best.get(h.convId).time)
+        best.set(h.convId, h);
+    });
+
+    const sorted = Array.from(best.values()).sort((a, b) => (b.time || 0) - (a.time || 0));
+    searchResults.classList.add('show');
+    clearBtn.style.display = 'flex';
+
+    searchResults.innerHTML = sorted.slice(0, 20).map(h => {
+      const t = h.time ? fmtDate(new Date(h.time * 1000), true) : '\u65F6\u95F4\u672A\u77E5';
+      return '<div class="result" data-conv-id="' + h.convId + '" data-msg-id="' + h.id + '">' +
+        '<div class="meta">' +
+          '<span class="conv-title">' + esc(h.convTitle) + '</span>' +
+          '<span class="time">' + t + '</span>' +
+        '</div>' +
+        '<div class="snippet">' + esc(h.snippet) + '</div>' +
+      '</div>';
+    }).join('');
+
+    searchResults.querySelectorAll('.result').forEach(el => {
+      el.addEventListener('click', () => {
+        selectConv(el.dataset.convId, false, false);
+        setTimeout(() => {
+          const target = document.getElementById(el.dataset.msgId);
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            target.classList.add('highlight');
+            setTimeout(() => target.classList.remove('highlight'), 1600);
+          }
+        }, 200);
+      });
+    });
+  }
+
+  // ── Markdown Renderer ──
+  function renderMD(text) {
+    if (!text) return '';
+    let t = esc(text);
+
+    const codeBlocks = [];
+    t = t.replace(/```[ \t]*([^\n`]*)\r?\n([\s\S]*?)(?:\r?\n?```|$)/g, function(_, lang, code) {
+      codeBlocks.push({ lang: lang, code: code });
+      return '__CODE_BLOCK_' + (codeBlocks.length - 1) + '__';
+    });
+
+    // tables
+    t = t.replace(/(\|.*\|[\r\n]+)+\|.*\|/g, function(block) {
+      var rows = block.trim().split('\n');
+      if (rows.length < 2) return block;
+      var headers = rows[0].split('|').slice(1, -1).map(function(s) { return s.trim(); });
+      var dataRows = rows.slice(2).map(function(r) { return r.split('|').slice(1, -1).map(function(s) { return s.trim(); }); });
+      var html = '<table class="markdown-table"><thead><tr>';
+      headers.forEach(function(h) { html += '<th>' + h + '</th>'; });
+      html += '</tr></thead><tbody>';
+      dataRows.forEach(function(row) {
+        html += '<tr>';
+        row.forEach(function(cell) { html += '<td>' + cell + '</td>'; });
+        html += '</tr>';
+      });
+      return html + '</tbody></table>';
+    });
+
+    t = t
+      .replace(/^[-*_]{3,}$/gm, '<hr>')
+      .replace(/^\s{0,3}(?:>|&gt;)\s*(.+)$/gm, '<blockquote>$1</blockquote>')
+      .replace(/^####\s?(.*)$/gm, '<h4>$1</h4>')
+      .replace(/^###\s?(.*)$/gm, '<h3>$1</h3>')
+      .replace(/^##\s?(.*)$/gm, '<h2>$1</h2>')
+      .replace(/^#\s?(.*)$/gm, '<h1>$1</h1>')
+      .replace(/^(\d+)\.\s+(.*)$/gm, '<ol start="$1"><li>$2</li></ol>')
+      .replace(/^[-*]\s+(.*)$/gm, '<ul><li>$1</li></ul>')
+      .replace(/^\s+[-*]\s+(.*)$/gm, '<ul style="margin-left:1.2rem"><li>$1</li></ul>')
+      .replace(/<\/ol>\s*<ol[^>]*>/g, '')
+      .replace(/<\/ul>\s*<ul[^>]*>/g, '');
+
+    t = t
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2" style="max-width:100%;border-radius:10px"/>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    t = t.replace(/\n{2,}/g, '</p><p>');
+
+    codeBlocks.forEach(function(block, i) {
+      t = t.replace('__CODE_BLOCK_' + i + '__',
+        '<pre><code class="language-' + (block.lang || 'text') + '">' + block.code.replace(/\n$/, '') + '</code></pre>');
+    });
+
+    t = t.replace(/<p>\s*<\/p>/g, '');
+    if (!t.startsWith('<') || t.startsWith('<strong') || t.startsWith('<em') || t.startsWith('<code') || t.startsWith('<a '))
+      t = '<p>' + t + '</p>';
+
+    return t;
+  }
+
+  // ── Model Name Shortener ──
+  function _shortModel(m, fallback) {
+    if (!m) return fallback || '';
+    var s = m.toLowerCase().replace(/-?\d{8,}/, ''); // remove date suffix
+    var families = ['opus','sonnet','haiku'];
+    for (var i = 0; i < families.length; i++) {
+      var f = families[i];
+      if (s.indexOf(f) < 0) continue;
+      var name = f.charAt(0).toUpperCase() + f.slice(1);
+      // collect all version numbers from the string (excluding family name)
+      var withoutFamily = s.replace(f, '');
+      var nums = withoutFamily.match(/\d+/g);
+      if (nums && nums.length) return name + '-' + nums.join('.');
+      return name;
+    }
+    return m;
+  }
+
+  // ── Utilities ──
+  function fmtDate(d, full) {
+    if (!(d instanceof Date) || isNaN(d)) return '\u65F6\u95F4\u672A\u77E5';
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    var y = d.getFullYear(), mo = pad(d.getMonth() + 1), day = pad(d.getDate());
+    var h = pad(d.getHours()), mi = pad(d.getMinutes()), s = pad(d.getSeconds());
+    return full ? y + '-' + mo + '-' + day + ' ' + h + ':' + mi + ':' + s : y + '-' + mo + '-' + day;
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function(c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  function escRe(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // ── Touch swipe ──
+  var touchStartX = 0;
+  document.addEventListener('touchstart', function(e) { touchStartX = e.changedTouches[0].screenX; });
+  document.addEventListener('touchend', function(e) {
+    var dx = touchStartX - e.changedTouches[0].screenX;
+    if (dx > 50 && sidebar.classList.contains('open')) toggleSidebar(false);
+  });
+}();
+</script>
+</body>
+</html>
